@@ -1,0 +1,32 @@
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Local database (never commit trading history)
+journal.db
+
+# MT5 export logs or temp files
+export_log.txt
+*.log
+
+# Compiled / packaged artifacts
+*.zip
+*.exe
+
+# OS metadata (Windows / OneDrive)
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Site output (GitHub Pages will build from site/, so KEEP the folder)
+# But ignore any local artifacts you don't want pushed:
+site/*.tmp
+
+# Anything inside "mt5 drop me in scripts" except .mq5 files
+mt5 drop me in scripts/*
+!mt5 drop me in scripts/*.mq5
+
+# Ignore scheduler debug outputs
+*.sched
+*.bak

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Battle Log</title>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --bg-alt: #ffffff;
+      --bg-detail: #f0f0f0;
+      --border: #d4d4d4;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --header-bg: #e5e7eb;
+      --pos: #16a34a;
+      --neg: #dc2626;
+      --row-hover: #e5e7eb;
+    }
+
+    body.theme-dark {
+      --bg: #111827;
+      --bg-alt: #030712;
+      --bg-detail: #020617;
+      --border: #374151;
+      --text: #e5e7eb;
+      --text-muted: #9ca3af;
+      --header-bg: #111827;
+      --row-hover: #1f2937;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 20px;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    h1, h2 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .top-bar h1 {
+      margin: 0;
+    }
+
+    .theme-toggle {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-alt);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      background: var(--bg-alt);
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: right;
+    }
+
+    th {
+      background: var(--header-bg);
+      font-weight: 600;
+    }
+
+    td:first-child, th:first-child {
+      text-align: left;
+    }
+
+    tr.day-row {
+      cursor: pointer;
+    }
+
+    tr.day-row:hover {
+      background: var(--row-hover);
+    }
+
+    tr.detail-row td {
+      background: var(--bg-detail);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .tag.TRADE { background: #e0f2f1; color: #0f766e; }
+    .tag.DEPOSIT { background: #dcfce7; color: #15803d; }
+    .tag.WITHDRAWAL { background: #fee2e2; color: #b91c1c; }
+    .tag.CORRECTION { background: #dbeafe; color: #1d4ed8; }
+    .tag.ADJUST { background: #e5e7eb; color: #374151; }
+    .tag.FEE { background: #fef3c7; color: #92400e; }
+
+    .pill-pos { color: var(--pos); }
+    .pill-neg { color: var(--neg); }
+
+    .loading {
+      padding: 8px;
+      font-style: italic;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1>Battle Log</h1>
+    <button id="theme-toggle" class="theme-toggle">Dark Mode</button>
+  </div>
+
+  <table id="days-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Start</th>
+        <th>PnL</th>
+        <th>End</th>
+        <th># Trades</th>
+        <th>Win %</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Filled by JS -->
+    </tbody>
+  </table>
+
+  <h2>Deposits &amp; Withdrawals</h2>
+  <table id="flows-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Type</th>
+        <th>Symbol</th>
+        <th>Amount</th>
+        <th>Comment</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Filled by JS -->
+    </tbody>
+  </table>
+
+  <h2>Monthly Statistics</h2>
+  <table id="monthly-table">
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th>Trade PnL</th>
+        <th>Non-Trade PnL</th>
+        <th>Total PnL</th>
+        <th># Trades</th>
+        <th>Trade Days</th>
+        <th>Win %</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Filled by JS -->
+    </tbody>
+  </table>
+
+  <h2>Yearly Statistics</h2>
+  <table id="yearly-table">
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Trade PnL</th>
+        <th>Non-Trade PnL</th>
+        <th>Total PnL</th>
+        <th># Trades</th>
+        <th>Trade Days</th>
+        <th>Win %</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Filled by JS -->
+    </tbody>
+  </table>
+
+  <script>
+    function fmtMoney(v) {
+      return Number(v).toFixed(2);
+    }
+
+    function pillPnL(v) {
+      const n = Number(v) || 0;
+      const cls = n >= 0 ? 'pill-pos' : 'pill-neg';
+      const s = n >= 0 ? '+' + n.toFixed(2) : n.toFixed(2);
+      return `<span class="${cls}">${s}</span>`;
+    }
+
+    async function loadDays() {
+      const res = await fetch('/api/days');
+      const days = await res.json();
+      const tbody = document.querySelector('#days-table tbody');
+      tbody.innerHTML = '';
+
+      days.forEach(day => {
+        const tr = document.createElement('tr');
+        tr.classList.add('day-row');
+        tr.dataset.date = day.date;
+
+        tr.innerHTML = `
+          <td>${day.date}</td>
+          <td>${fmtMoney(day.starting_balance)}</td>
+          <td>${pillPnL(day.pnl)}</td>
+          <td>${fmtMoney(day.ending_balance)}</td>
+          <td>${day.num_trades}</td>
+          <td>${Number(day.win_rate || 0).toFixed(1)}%</td>
+        `;
+
+        tr.addEventListener('click', () => toggleDayDetails(day.date, tr));
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function toggleDayDetails(date, rowEl) {
+      const tbody = rowEl.parentElement;
+      const nextRow = rowEl.nextElementSibling;
+
+      // If detail row already open for this date, remove it
+      if (nextRow && nextRow.classList.contains('detail-row') && nextRow.dataset.date === date) {
+        tbody.removeChild(nextRow);
+        return;
+      }
+
+      // If some other detail row is open directly below, remove it first
+      if (nextRow && nextRow.classList.contains('detail-row')) {
+        tbody.removeChild(nextRow);
+      }
+
+      // Insert new detail row
+      const detailRow = document.createElement('tr');
+      detailRow.classList.add('detail-row');
+      detailRow.dataset.date = date;
+
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.innerHTML = `<div class="day-details"><div class="loading">Loading trades for ${date}…</div></div>`;
+      detailRow.appendChild(cell);
+
+      if (rowEl.nextSibling) {
+        tbody.insertBefore(detailRow, rowEl.nextSibling);
+      } else {
+        tbody.appendChild(detailRow);
+      }
+
+      try {
+        const res = await fetch(`/api/days/${encodeURIComponent(date)}/trades`);
+        const trades = await res.json();
+        renderTradesTable(cell, date, trades);
+      } catch (err) {
+        cell.innerHTML = `<div class="loading">Error loading trades: ${err}</div>`;
+      }
+    }
+
+    function renderTradesTable(containerCell, date, trades) {
+      if (!trades || trades.length === 0) {
+        containerCell.innerHTML = `<div class="loading">No trades or events for ${date}.</div>`;
+        return;
+      }
+
+      let html = `
+        <div>
+          <strong>Trades / Events for ${date} (${trades.length})</strong>
+          <table>
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Time</th>
+                <th>Side</th>
+                <th>Event</th>
+                <th>Symbol</th>
+                <th>Size</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>PnL</th>
+                <th>Comm</th>
+                <th>Swap</th>
+                <th>Magic</th>
+                <th>Comment</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const t of trades) {
+        const side = t.side || '';
+        const etype = t.event_type || 'TRADE';
+        const tagClass = `tag ${etype}`;
+        const pnl = Number(t.pnl || 0);
+        const pnlHtml = pillPnL(pnl);
+
+        html += `
+          <tr>
+            <td>${t.ticket}</td>
+            <td>${t.time}</td>
+            <td>${side}</td>
+            <td><span class="${tagClass}">${etype}</span></td>
+            <td>${t.symbol || ''}</td>
+            <td>${(t.size || 0).toFixed ? t.size.toFixed(2) : t.size}</td>
+            <td>${t.entry !== null && t.entry !== undefined ? t.entry : ''}</td>
+            <td>${t.exit !== null && t.exit !== undefined ? t.exit : ''}</td>
+            <td>${pnlHtml}</td>
+            <td>${(t.commission || 0).toFixed ? t.commission.toFixed(2) : t.commission}</td>
+            <td>${(t.swap || 0).toFixed ? t.swap.toFixed(2) : t.swap}</td>
+            <td>${t.magic}</td>
+            <td>${t.comment || ''}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      containerCell.innerHTML = html;
+    }
+
+    async function loadFlows() {
+      const res = await fetch('/api/flows');
+      const flows = await res.json();
+      const tbody = document.querySelector('#flows-table tbody');
+      tbody.innerHTML = '';
+
+      flows.forEach(f => {
+        const tr = document.createElement('tr');
+        const pnlHtml = pillPnL(f.pnl || 0);
+        tr.innerHTML = `
+          <td>${f.date}</td>
+          <td>${f.time}</td>
+          <td>${f.event_type}</td>
+          <td>${f.symbol || ''}</td>
+          <td>${pnlHtml}</td>
+          <td>${f.comment || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadMonthly() {
+      const res = await fetch('/api/stats/monthly');
+      const stats = await res.json();
+      const tbody = document.querySelector('#monthly-table tbody');
+      tbody.innerHTML = '';
+
+      stats.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${m.month}</td>
+          <td>${pillPnL(m.trade_pnl || 0)}</td>
+          <td>${pillPnL(m.nontrade_pnl || 0)}</td>
+          <td>${pillPnL(m.total_pnl || 0)}</td>
+          <td>${m.num_trades}</td>
+          <td>${m.trade_days}</td>
+          <td>${Number(m.win_rate || 0).toFixed(1)}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadYearly() {
+      const res = await fetch('/api/stats/yearly');
+      const stats = await res.json();
+      const tbody = document.querySelector('#yearly-table tbody');
+      tbody.innerHTML = '';
+
+      stats.forEach(y => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${y.year}</td>
+          <td>${pillPnL(y.trade_pnl || 0)}</td>
+          <td>${pillPnL(y.nontrade_pnl || 0)}</td>
+          <td>${pillPnL(y.total_pnl || 0)}</td>
+          <td>${y.num_trades}</td>
+          <td>${y.trade_days}</td>
+          <td>${Number(y.win_rate || 0).toFixed(1)}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function initTheme() {
+      const btn = document.getElementById('theme-toggle');
+      const saved = localStorage.getItem('journal_theme');
+
+      if (saved === 'dark') {
+        document.body.classList.add('theme-dark');
+        btn.textContent = 'Light Mode';
+      } else {
+        document.body.classList.remove('theme-dark');
+        btn.textContent = 'Dark Mode';
+      }
+
+      btn.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('theme-dark');
+        localStorage.setItem('journal_theme', isDark ? 'dark' : 'light');
+        btn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      loadDays();
+      loadFlows();
+      loadMonthly();
+      loadYearly();
+    });
+  </script>
+</body>
+</html>
